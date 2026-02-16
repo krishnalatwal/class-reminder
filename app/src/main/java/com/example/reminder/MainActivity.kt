@@ -7,6 +7,14 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Intent
+import java.util.Calendar
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +37,21 @@ class MainActivity : AppCompatActivity() {
         txtSaved = findViewById(R.id.txtSaved)
 
         val prefs = getSharedPreferences("schedule", MODE_PRIVATE)
+
+        // Request notification permission (Android 13+)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    1
+                )
+            }
+        }
 
         // Time picker
         btnPickTime.setOnClickListener {
@@ -70,6 +93,33 @@ class MainActivity : AppCompatActivity() {
                 selectedHour,
                 selectedMinute
             )
+
+            // Schedule alarm safely
+            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+            val intent = Intent(this, ReminderReceiver::class.java)
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val calendar = Calendar.getInstance()
+            calendar.set(Calendar.HOUR_OF_DAY, selectedHour)
+            calendar.set(Calendar.MINUTE, selectedMinute)
+            calendar.set(Calendar.SECOND, 0)
+
+            if (calendar.timeInMillis < System.currentTimeMillis()) {
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+            }
+
+            // SAFE alarm (no crash)
+            alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
         }
 
         // Load saved data on start
@@ -78,7 +128,6 @@ class MainActivity : AppCompatActivity() {
         val savedMinute = prefs.getInt("minute", 0)
 
         if (savedTitle != "") {
-
             selectedHour = savedHour
             selectedMinute = savedMinute
 
